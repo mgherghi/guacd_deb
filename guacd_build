@@ -13,7 +13,7 @@ sudo apt install -y build-essential autotools-dev debhelper \
     libavcodec-dev libavutil-dev libswscale-dev freerdp2-dev \
     libpango1.0-dev libssh2-1-dev libtelnet-dev libvncserver-dev \
     libpulse-dev libssl-dev libvorbis-dev libwebp-dev libwebsockets-dev \
-    wget curl
+    logrotate wget curl
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
@@ -36,7 +36,8 @@ Build-Depends: debhelper-compat (= 13), autotools-dev, \
  libcairo2-dev, libjpeg62-turbo-dev, libpng-dev, libossp-uuid-dev, \
  libavcodec-dev, libavutil-dev, libswscale-dev, freerdp2-dev, \
  libpango1.0-dev, libssh2-1-dev, libtelnet-dev, libvncserver-dev, \
- libpulse-dev, libssl-dev, libvorbis-dev, libwebp-dev, libwebsockets-dev
+ libpulse-dev, libssl-dev, libvorbis-dev, libwebp-dev, libwebsockets-dev, \
+ logrotate
 Standards-Version: 4.6.0
 Homepage: https://guacamole.apache.org/
 
@@ -46,7 +47,7 @@ Depends: libcairo2, libjpeg62-turbo, libpng16-16, libossp-uuid16, \
  libavcodec58, libavutil56, libswscale5, freerdp2-x11, \
  libpango-1.0-0, libssh2-1, libtelnet2, libvncserver1, \
  libpulse0, libssl3, libvorbis0a, libvorbisenc2, libwebp7, \
- libwebsockets16, ffmpeg, \${misc:Depends}
+ libwebsockets16, ffmpeg, logrotate, \${misc:Depends}
 Description: Guacamole remote desktop gateway (server daemon)
  guacd proxy daemon supporting RDP, VNC, SSH, Telnet, and more.
 EOF
@@ -71,6 +72,7 @@ cat > debian/changelog <<EOF
 guacamole-server (${GUAC_VERSION}-1) stable; urgency=medium
 
   * Production-ready build of guacamole-server ${GUAC_VERSION} for Debian 12
+  * Includes hardened systemd unit, default configs, and logrotate support
 
  -- Guacamole Builder <builder@example.com>  $(date -R)
 EOF
@@ -85,6 +87,7 @@ bind_host = 0.0.0.0
 bind_port = 4822
 pid_file = /var/run/guacd.pid
 log_level = info
+log_file = /var/log/guacd/guacd.log
 EOF
 
 ###############################################################################
@@ -116,6 +119,25 @@ ReadWritePaths=/var/log/guacd /var/run
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+###############################################################################
+# Logrotate config
+###############################################################################
+mkdir -p debian/guacamole-server/etc/logrotate.d
+cat > debian/guacamole-server/etc/logrotate.d/guacd <<'EOF'
+/var/log/guacd/*.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+    create 0640 guacd guacd
+    sharedscripts
+    postrotate
+        systemctl kill -s HUP guacd.service >/dev/null 2>&1 || true
+    endscript
+}
 EOF
 
 ###############################################################################
@@ -160,9 +182,9 @@ cd "$BUILD_DIR"
 ###############################################################################
 # Install package
 ###############################################################################
-echo "[+] Installing guacamole-server .deb..."
-sudo dpkg -i guacamole-server_${GUAC_VERSION}-1_amd64.deb
-sudo apt-get install -f -y
+#echo "[+] Installing guacamole-server .deb..."
+#sudo dpkg -i guacamole-server_${GUAC_VERSION}-1_amd64.deb
+#sudo apt-get install -f -y
 
-echo "[+] guacd installed, enabled, and running."
-systemctl status guacd --no-pager
+#echo "[+] guacd installed, enabled, and running."
+#systemctl status guacd --no-pager
